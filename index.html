@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rich Premium Chess</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome for Chess Pieces -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chess.js Logic Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap');
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: radial-gradient(circle at center, #2a2d34 0%, #101216 100%);
+            color: #ffffff;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .title-font {
+            font-family: 'Cinzel', serif;
+        }
+
+        /* Glassmorphism Panel */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        /* Chess Board Styles */
+        .board-container {
+            border: 12px solid #2c1e16;
+            border-radius: 8px;
+            box-shadow: 
+                0 20px 50px rgba(0,0,0,0.5),
+                inset 0 0 20px rgba(0,0,0,0.8);
+            background-color: #2c1e16;
+            background-image: linear-gradient(45deg, #3d2314 25%, transparent 25%, transparent 75%, #3d2314 75%, #3d2314), 
+                              linear-gradient(45deg, #3d2314 25%, transparent 25%, transparent 75%, #3d2314 75%, #3d2314);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+        }
+
+        .square {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        /* Classic Wood Theme Colors */
+        .square.light {
+            background-color: #f0d9b5;
+        }
+        .square.dark {
+            background-color: #b58863;
+        }
+
+        /* Piece Styles */
+        .chess-piece {
+            font-size: 2rem;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 10;
+        }
+        
+        @media (min-width: 640px) {
+            .chess-piece {
+                font-size: 3rem;
+            }
+        }
+
+        .chess-piece:hover {
+            transform: scale(1.15) translateY(-5px);
+        }
+
+        .piece-white {
+            color: #ffffff;
+            text-shadow: 
+                0 4px 6px rgba(0,0,0,0.6),
+                0 1px 1px rgba(0,0,0,0.3);
+            -webkit-text-stroke: 1px rgba(0,0,0,0.2);
+        }
+
+        .piece-black {
+            color: #1a1a1a;
+            text-shadow: 
+                0 4px 6px rgba(0,0,0,0.8),
+                0 1px 1px rgba(255,255,255,0.2);
+            -webkit-text-stroke: 1px rgba(255,255,255,0.1);
+        }
+
+        /* Highlights */
+        .square.selected::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-color: rgba(255, 215, 0, 0.4);
+            z-index: 5;
+        }
+
+        .square.last-move::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-color: rgba(155, 199, 0, 0.41);
+            z-index: 4;
+        }
+
+        .square.valid-move::after {
+            content: '';
+            position: absolute;
+            width: 25%;
+            height: 25%;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 50%;
+            z-index: 6;
+        }
+        
+        .square.valid-move-capture::after {
+            content: '';
+            position: absolute;
+            width: 80%;
+            height: 80%;
+            border: 5px solid rgba(0, 0, 0, 0.2);
+            border-radius: 50%;
+            background: transparent;
+            z-index: 6;
+        }
+
+        /* Custom Scrollbar for move history */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05); 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2); 
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.4); 
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+
+    <div class="max-w-5xl mx-auto w-full flex flex-col lg:flex-row gap-8 items-start justify-center">
+        
+        <!-- Left Side: Header & Board -->
+        <div class="w-full lg:w-2/3 flex flex-col items-center">
+            
+            <h1 class="title-font text-4xl sm:text-5xl font-bold mb-6 tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600 drop-shadow-lg text-center">
+                <i class="fa-solid fa-chess mr-2 text-yellow-500"></i>ROYAL CHESS
+            </h1>
+
+            <!-- Game Status Panel -->
+            <div class="glass-panel w-full max-w-[600px] p-4 rounded-xl mb-6 flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <div id="turnIndicator" class="w-4 h-4 rounded-full bg-white shadow-[0_0_10px_white]"></div>
+                    <span id="statusText" class="text-xl font-semibold tracking-wide">白の番です</span>
+                </div>
+                <button onclick="resetGame()" class="bg-white/10 hover:bg-white/20 border border-white/20 transition-all px-4 py-2 rounded-lg font-medium text-sm sm:text-base flex items-center gap-2">
+                    <i class="fa-solid fa-rotate-right"></i> リセット
+                </button>
+            </div>
+
+            <!-- The Chess Board -->
+            <div id="board" class="w-full max-w-[600px] aspect-square grid grid-cols-8 grid-rows-8 board-container relative">
+                <!-- Squares injected by JS -->
+            </div>
+            
+            <!-- Coordinates indicator (A-H, 1-8) visual aids -->
+            <div class="w-full max-w-[600px] flex justify-between px-2 sm:px-6 mt-1 text-xs text-gray-500 font-medium">
+                <span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span>
+            </div>
+        </div>
+
+        <!-- Right Side: Game Info / History -->
+        <div class="w-full lg:w-1/3 glass-panel rounded-xl flex flex-col h-[400px] lg:h-[600px] overflow-hidden mt-0 lg:mt-[90px]">
+            <div class="bg-black/30 p-4 border-b border-white/10">
+                <h2 class="text-lg font-bold title-font tracking-widest"><i class="fa-solid fa-scroll mr-2"></i>MOVE HISTORY</h2>
+            </div>
+            <div id="moveHistory" class="flex-1 overflow-y-auto p-4 flex flex-col gap-2 font-mono text-sm">
+                <!-- Moves injected by JS -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Custom Modal -->
+    <div id="modalOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="glass-panel p-8 rounded-2xl max-w-md w-full mx-4 transform scale-95 transition-transform duration-300 shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-yellow-500/30 text-center">
+            <h2 id="modalTitle" class="title-font text-3xl font-bold mb-4 text-yellow-500">Checkmate!</h2>
+            <p id="modalText" class="text-lg mb-8 text-gray-200">白の勝利です</p>
+            <button onclick="closeModal(); resetGame();" class="bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-bold py-3 px-8 rounded-full shadow-lg transition-all transform hover:scale-105">
+                もう一度プレイ
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Chess game logic
+        const game = new Chess();
+        
+        const boardEl = document.getElementById('board');
+        const statusTextEl = document.getElementById('statusText');
+        const turnIndicatorEl = document.getElementById('turnIndicator');
+        const moveHistoryEl = document.getElementById('moveHistory');
+        
+        let selectedSquare = null;
+        let lastMove = null;
+        let isAITurn = false;
+
+        // Map piece types to FontAwesome classes
+        const pieceIcons = {
+            'p': 'fa-chess-pawn',
+            'n': 'fa-chess-knight',
+            'b': 'fa-chess-bishop',
+            'r': 'fa-chess-rook',
+            'q': 'fa-chess-queen',
+            'k': 'fa-chess-king'
+        };
+
+        function renderBoard() {
+            boardEl.innerHTML = '';
+            const board = game.board(); // Returns 8x8 array
+            const validMoves = selectedSquare ? game.moves({ square: selectedSquare, verbose: true }) : [];
+
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const squareId = String.fromCharCode(97 + c) + (8 - r); // ex: a8, b8
+                    const isDark = (r + c) % 2 !== 0;
+                    
+                    const squareEl = document.createElement('div');
+                    squareEl.className = `square ${isDark ? 'dark' : 'light'}`;
+                    squareEl.dataset.square = squareId;
+
+                    // Highlighting
+                    if (selectedSquare === squareId) {
+                        squareEl.classList.add('selected');
+                    }
+                    if (lastMove && (lastMove.from === squareId || lastMove.to === squareId)) {
+                        squareEl.classList.add('last-move');
+                    }
+                    
+                    // Valid Move Hint
+                    const moveMatch = validMoves.find(m => m.to === squareId);
+                    if (moveMatch) {
+                        if(game.get(squareId)) {
+                            squareEl.classList.add('valid-move-capture');
+                        } else {
+                            squareEl.classList.add('valid-move');
+                        }
+                    }
+
+                    // Render Piece
+                    const piece = board[r][c];
+                    if (piece) {
+                        const pieceEl = document.createElement('i');
+                        pieceEl.className = `fa-solid ${pieceIcons[piece.type]} chess-piece ${piece.color === 'w' ? 'piece-white' : 'piece-black'}`;
+                        squareEl.appendChild(pieceEl);
+                    }
+
+                    squareEl.addEventListener('click', () => handleSquareClick(squareId));
+                    boardEl.appendChild(squareEl);
+                }
+            }
+            updateStatus();
+        }
+
+        function handleSquareClick(squareId) {
+            if (game.game_over() || isAITurn) return;
+
+            // If a square is already selected, try to move there
+            if (selectedSquare) {
+                const moveObj = {
+                    from: selectedSquare,
+                    to: squareId,
+                    promotion: 'q' // Auto-promote to Queen for simplicity
+                };
+                
+                const validMoves = game.moves({ verbose: true });
+                const isValid = validMoves.some(m => m.from === moveObj.from && m.to === moveObj.to);
+
+                if (isValid) {
+                    const move = game.move(moveObj);
+                    if (move) {
+                        lastMove = { from: move.from, to: move.to };
+                        selectedSquare = null;
+                        addMoveToHistory(move);
+                        renderBoard();
+                        checkGameOver();
+
+                        if (!game.game_over()) {
+                            isAITurn = true;
+                            updateStatus();
+                            setTimeout(makeAIMove, 400); // 少し待機してからCPUが動く
+                        }
+                        return;
+                    }
+                }
+            }
+
+            // Select a piece if it's the current player's turn (White only)
+            const piece = game.get(squareId);
+            if (piece && piece.color === game.turn() && piece.color === 'w') {
+                selectedSquare = squareId;
+            } else {
+                selectedSquare = null;
+            }
+            renderBoard();
+        }
+
+        function updateStatus() {
+            let status = '';
+            let moveColor = game.turn() === 'w' ? 'あなた (白)' : 'CPU (黒)';
+
+            turnIndicatorEl.className = `w-4 h-4 rounded-full shadow-[0_0_10px_currentColor] transition-colors duration-300 ${game.turn() === 'w' ? 'bg-white text-white' : 'bg-gray-800 text-gray-800 border border-gray-600'}`;
+
+            if (game.in_checkmate()) {
+                status = `チェックメイト！ ${moveColor === 'あなた (白)' ? 'CPU' : 'あなた'}の勝利`;
+            } else if (game.in_draw()) {
+                status = '引き分け';
+            } else {
+                if (isAITurn) {
+                    status = 'CPUが思考中...';
+                } else {
+                    status = 'あなたの番です';
+                }
+                
+                if (game.in_check()) {
+                    status += ' (チェック!)';
+                    statusTextEl.classList.add('text-red-400');
+                } else {
+                    statusTextEl.classList.remove('text-red-400');
+                }
+            }
+            statusTextEl.innerText = status;
+        }
+
+        // --- AI (CPU) Logic ---
+        const pieceValues = { p: 10, n: 30, b: 30, r: 50, q: 90, k: 900 };
+
+        function evaluateBoard(gameInst) {
+            let value = 0;
+            const board = gameInst.board();
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const piece = board[r][c];
+                    if (piece) {
+                        const pVal = pieceValues[piece.type];
+                        value += piece.color === 'w' ? pVal : -pVal; // 白にとっての良さを計算
+                    }
+                }
+            }
+            return value;
+        }
+
+        function minimax(gameInst, depth, isMaximizingPlayer) {
+            if (depth === 0 || gameInst.game_over()) {
+                return evaluateBoard(gameInst);
+            }
+            const moves = gameInst.moves();
+            
+            if (isMaximizingPlayer) {
+                let bestVal = -Infinity;
+                for (let i = 0; i < moves.length; i++) {
+                    gameInst.move(moves[i]);
+                    let val = minimax(gameInst, depth - 1, false);
+                    gameInst.undo();
+                    bestVal = Math.max(bestVal, val);
+                }
+                return bestVal;
+            } else {
+                let bestVal = Infinity;
+                for (let i = 0; i < moves.length; i++) {
+                    gameInst.move(moves[i]);
+                    let val = minimax(gameInst, depth - 1, true);
+                    gameInst.undo();
+                    bestVal = Math.min(bestVal, val);
+                }
+                return bestVal;
+            }
+        }
+
+        function makeAIMove() {
+            if (game.game_over()) return;
+
+            const moves = game.moves({ verbose: true });
+            if (moves.length === 0) return;
+
+            let bestValue = Infinity; // 黒(AI)は盤面評価値を最小化したい
+            let bestMoves = [];
+
+            // 深さ1 (自分と相手の次の1手までを読んで最善手を選ぶ)
+            for (let i = 0; i < moves.length; i++) {
+                game.move(moves[i]);
+                let boardValue = minimax(game, 1, true); 
+                game.undo();
+
+                if (boardValue < bestValue) {
+                    bestValue = boardValue;
+                    bestMoves = [moves[i]];
+                } else if (boardValue === bestValue) {
+                    bestMoves.push(moves[i]);
+                }
+            }
+
+            // 同価値の手が複数ある場合はランダムで選んで単調さを防ぐ
+            const bestMove = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+
+            const move = game.move(bestMove);
+            lastMove = { from: move.from, to: move.to };
+            addMoveToHistory(move);
+            isAITurn = false;
+            renderBoard();
+            checkGameOver();
+        }
+        // --- End AI Logic ---
+
+        function checkGameOver() {
+            if (game.in_checkmate()) {
+                const winner = game.turn() === 'w' ? '黒 (Black)' : '白 (White)';
+                showModal('Checkmate!', `${winner} の勝利です！`);
+            } else if (game.in_stalemate()) {
+                showModal('Stalemate!', 'ステールメイトにより引き分けです。');
+            } else if (game.in_draw()) {
+                showModal('Draw!', '引き分けです。');
+            }
+        }
+
+        function addMoveToHistory(move) {
+            const moveCount = Math.floor(game.history().length / 2) + (game.turn() === 'b' ? 1 : 0);
+            
+            let row = moveHistoryEl.lastElementChild;
+            if (game.turn() === 'b') {
+                // White just moved, create new row
+                row = document.createElement('div');
+                row.className = "flex justify-between items-center bg-white/5 p-2 rounded hover:bg-white/10 transition-colors";
+                row.innerHTML = `<span class="text-gray-400 w-8">${moveCount}.</span>
+                                 <span class="w-1/2 text-left">${move.san}</span>
+                                 <span class="w-1/2 text-left text-gray-500">...</span>`;
+                moveHistoryEl.appendChild(row);
+            } else {
+                // Black just moved, update existing row
+                if(row) {
+                    const spans = row.querySelectorAll('span');
+                    if(spans.length >= 3) {
+                        spans[2].innerHTML = move.san;
+                        spans[2].classList.remove('text-gray-500');
+                    }
+                }
+            }
+            moveHistoryEl.scrollTop = moveHistoryEl.scrollHeight;
+        }
+
+        function resetGame() {
+            game.reset();
+            selectedSquare = null;
+            lastMove = null;
+            isAITurn = false;
+            moveHistoryEl.innerHTML = '';
+            renderBoard();
+        }
+
+        // Modal Logic
+        function showModal(title, text) {
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalText').innerText = text;
+            const overlay = document.getElementById('modalOverlay');
+            overlay.classList.remove('opacity-0', 'pointer-events-none');
+            overlay.querySelector('.glass-panel').classList.remove('scale-95');
+            overlay.querySelector('.glass-panel').classList.add('scale-100');
+        }
+
+        function closeModal() {
+            const overlay = document.getElementById('modalOverlay');
+            overlay.classList.add('opacity-0', 'pointer-events-none');
+            overlay.querySelector('.glass-panel').classList.remove('scale-100');
+            overlay.querySelector('.glass-panel').classList.add('scale-95');
+        }
+
+        // Initialize first render
+        renderBoard();
+    </script>
+</body>
+</html>
